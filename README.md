@@ -1,5 +1,5 @@
 # Stampede
-This module aims to make it easy to create tools that rush a resource, such as an API endpoint or web UI.
+This module aims to make it easy to create tools that rush a resource, such as an API endpoint or web UI. This will run with Python 2.6+ or 3.0+.
 
 This was origionally created to test the throttling of authentication attempts.
 
@@ -8,7 +8,6 @@ This was origionally created to test the throttling of authentication attempts.
 This example attempts to connect to an API endpoint which will throttle after 10 requests:
 
 ```python
-# this does not work with jython
 try:
     # Python 2
     from xmlrpclib import ServerProxy, Fault

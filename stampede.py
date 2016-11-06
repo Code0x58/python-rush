@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from collections import Counter
+from collections import defaultdict
 from datetime import timedelta
 from threading import Thread, Event, Condition
 from time import time
@@ -122,12 +122,15 @@ class Stampede(object):
     def analyse(self, max_seconds=None):
         """
         Perform a rush and print the numer of completed workers, duration,
-        and result counts.
+        and result counts. This requires results to be hashable.
 
         Returns (duration, results) from the rush method.
         """
         duration, results = self.rush(max_seconds)
-        counts = Counter(results)
+        # This avoids the use of collections.Counter to be 2.6+ compatible
+        counts = defaultdict(int)
+        for result in results:
+            counts[result] += 1
         print("{} threads completed in {}, results:".format(
             len(results),
             str(timedelta(seconds=duration)).lstrip('0:'),
