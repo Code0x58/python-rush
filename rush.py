@@ -16,15 +16,14 @@ class Rusher(object):
     """
     def __init__(self, thread_count):
         self.thread_count = thread_count
-        # this is locked by workers
+        # the orchestrator waits for notification of this from the workers
         self.ready_progress = Condition()
         self._total_ready = 0
-        # this triggers the rush
+        # this triggers the rush in the worker threads
         self.trigger = Event()
         self.return_list = []
         self.threads = []
-        # indicates that a rush is in progress. Can be used in workers to
-        # decide when it should give up
+        # this can be used in worker threads to see if they should give up
         self.rushing = False
 
     def _create_threads(self):
@@ -165,11 +164,9 @@ if __name__ == '__main__':
                     yield 'throttled'
 
     print("API rate limiting test:")
-    # the API will throttle after 10 requests, so make 9 requests first, then
-    # rush two calls
+    # the API will throttle after 10 requests
     rusher = UserAPIInvalidAuthTester(9)
-    # preform the first 9 requests so the next request should set a throttling
-    # indicator
+    # preform 9 requests so the next request should set a throttling indicator
     duration, results = rusher.analyse()
     # change the number of threads we want to make
     rusher.thread_count = 2
