@@ -31,12 +31,23 @@ class Stampede(object):
             thread.start()
             self.threads.append(thread)
 
-    def _wait_for_threads(self):
+    def _wait_for_threads(self, end_time=None):
         """
-        Wait for any worker threads to finish.
+        Wait for all worker threads to finish. Return True if all finished
+        before the specified end time.
         """
         for thread in self.threads:
-            thread.join()
+            if end_time is not None:
+                max_wait = end_time - time()
+                if max_wait < 0:
+                    return False
+            else:
+                max_wait = None
+            thread.join(max_wait)
+            # this is likely to happen if the timeout happened
+            if thread.is_alive():
+                return False
+        return True
 
     def rush(self, max_time):
         """
@@ -44,16 +55,15 @@ class Stampede(object):
         and then start the rush event. Returns the duration and results.
         """
         self._create_threads()
+        # TODO: replace with a threading object
         while len(self.ready) != self.thread_count:
             sleep(.05)
         start = time()
+        wait_until = time() + max_time if max_time else None
+
         self.trigger.set()
-        if max_time > 0:
-            # this is so the workers have roughly max_time to rush
-            sleep(float(max_time)-0.004)
-        else:
-            while active_count() != 1:
-                sleep(.05)
+        self._wait_for_threads(wait_until)
+
         results = tuple(self.return_list)
         end = time()
         duration = end-start
@@ -64,6 +74,7 @@ class Stampede(object):
         This should be overridden in a subclass and called as soon as the
         worker thread is ready to begin rushing it's main task.
         """
+        # XXX: maybe yeild, set the ready +1, then resume on the trigger
         self.ready.append(1)
         self.trigger.wait()
 
