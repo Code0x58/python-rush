@@ -5,12 +5,12 @@ from threading import Thread, Event, Condition
 from time import time
 
 
-class Stampede(object):
+class Rusher(object):
     """
     This class is intended to create self.thread_count worker threads which
     will be used to rush a resource. This can be used to test rate limiting.
 
-    During Stampede.rush() the workers are created and run until they yield.
+    During Rusher.rush() the workers are created and run until they yield.
     Once all the workers have yielded they are then run at once so they can
     rush a resource.
     """
@@ -147,7 +147,7 @@ if __name__ == '__main__':
     except ImportError:
         from xmlrpc.client import ServerProxy, Fault
 
-    class UserAPIInvalidAuthTester(Stampede):
+    class UserAPIInvalidAuthTester(Rusher):
         """
         Rush the API with invalid credentials authentication attempts.
         """

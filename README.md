@@ -1,5 +1,5 @@
-# Stampede
-This module aims to make it easy to create tools that rush a resource, such as an API endpoint or web UI. This will run with Python 2.6+ or 3.0+.
+# Rush
+This python module is for making tools that rush a resource, such as an API endpoint or web UI. This will run with Python 2.6+ or 3.0+.
 
 This was origionally created to test the throttling of authentication attempts.
 
@@ -14,10 +14,10 @@ try:
 except ImportError:
     # Python 3
     from xmlrpc.client import ServerProxy, Fault
-from stampede import Stampede
+from rush import Rusher
 
 
-class ApiAuthThrottlingTester(Stampede):
+class ApiAuthThrottlingTester(Rusher):
     """
     Rush the API with invalid credentials authentication attempts.
     """
