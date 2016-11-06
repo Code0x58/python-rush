@@ -3,13 +3,16 @@ from collections import Counter
 from datetime import timedelta
 from threading import Thread, Event, Condition
 from time import time
-from xmlrpclib import ServerProxy, Fault
 
 
 class Stampede(object):
     """
-    This class creates self.thread_count threads, the task of these threads is
-    self.work which should wait for trigger.set
+    This class is intended to create self.thread_count worker threads which
+    will be used to rush a resource. This can be used to test rate limiting.
+
+    During Stampede.rush() the workers are created and run until they yield.
+    Once all the workers have yielded they are then run at once so they can
+    rush a resource.
     """
     def __init__(self, thread_count):
         self.thread_count = thread_count
@@ -20,6 +23,9 @@ class Stampede(object):
         self.trigger = Event()
         self.return_list = []
         self.threads = []
+        # indicates that a rush is in progress. Can be used in workers to
+        # decide when it should give up
+        self.rushing = False
 
     def _create_threads(self):
         """
@@ -37,6 +43,8 @@ class Stampede(object):
         """
         Wait for all worker threads to finish. Return True if all finished
         before the specified end time.
+
+        Unfinished threads are not killed.
         """
         for thread in self.threads:
             if end_time is not None:
@@ -51,21 +59,29 @@ class Stampede(object):
                 return False
         return True
 
-    def rush(self, max_time):
+    def rush(self, max_seconds=None):
         """
         Start up all the worker threads, wait for them to be ready to rush
-        and then start the rush event. Returns the duration and results.
+        and then fire the rush event.
+
+        max_seconds is either None for no limiting, or a float.
+
+        Returns (duration, results).
         """
         self.ready_progress.acquire()
+        self._total_ready = 0
         self._create_threads()
         self.ready_progress.wait()
         self.ready_progress.release()
 
         start = time()
-        wait_until = time() + max_time if max_time else None
+        wait_until = time() + max_seconds if max_seconds else None
 
+        self.rushing = True
         self.trigger.set()
         self._wait_for_threads(wait_until)
+        self.trigger.clear()
+        self.rushing = False
 
         results = tuple(self.return_list)
         end = time()
@@ -74,7 +90,10 @@ class Stampede(object):
 
     def _work(self):
         """
-        Calls the worker method.
+        Iterates the work generator once for it to prepare itself, then a
+        second time when all the workers are ready to rush.
+
+        Appends the result of the second yield to self.return_list
         """
         worker = iter(self.work())
         next(worker)
@@ -93,45 +112,63 @@ class Stampede(object):
 
     def work(self):
         """
-        This should be overridden in a subclass and called as soon as the
-        worker thread is ready to begin rushing it's main task.
+        Override this method to do work and return a result.
         """
-        pass
-        yield
-        yield True
+        # preform any setup here
+        yield  # indicate that the worker has set itself up
+        # do work work here
+        yield "Finished"  # return result of work here
 
-    def analyse(self, max_time=0):
+    def analyse(self, max_seconds=None):
         """
-        Print the number of completed workers, duration and result counts.
+        Perform a rush and print the numer of completed workers, duration,
+        and result counts.
+
+        Returns (duration, results) from the rush method.
         """
-        duration, results = self.rush(max_time)
+        duration, results = self.rush(max_seconds)
         counts = Counter(results)
-        print "%s threads completed in %s, results:\n\t%s" % (
-                len(results),
-                str(timedelta(seconds=duration)).lstrip('0:'),
-                "\n\t".join("%s: %s" % result for result in counts.items()),
-        )
+        print("{} threads completed in {}, results:".format(
+            len(results),
+            str(timedelta(seconds=duration)).lstrip('0:'),
+        ))
+        for result, count in counts.items():
+            print("\t{}: {}".format(result, count))
 
-
-class UserAPIFakeAuthTester(Stampede):
-    """
-    Rush the API with username+password authentication attempts (fake account).
-    """
-    uri = 'https://badname:supersecretpassword@api.memset.com/v1/xmlrpc/'
-
-    def work(self):
-        proxy = ServerProxy(self.uri)
-        yield
-        try:
-            proxy.server.list()
-        except Fault as error:
-            if error.faultCode == 4:  # bad username/pass
-                yield 'attempted'
-            elif error.faultCode == 12:  # throttled
-                yield 'throttled'
+        return (duration, results)
 
 
 if __name__ == '__main__':
-    print
-    print "API user+password (fake account) authentication test:"
-    UserAPIFakeAuthTester(5).analyse()
+    try:
+        from xmlrpclib import ServerProxy, Fault
+    except ImportError:
+        from xmlrpc.client import ServerProxy, Fault
+
+    class UserAPIInvalidAuthTester(Stampede):
+        """
+        Rush the API with invalid credentials authentication attempts.
+        """
+        uri = 'https://badname:supersecretpassword@api.memset.com/v1/xmlrpc/'
+
+        def work(self):
+            proxy = ServerProxy(self.uri)
+            yield
+            try:
+                proxy.server.list()
+            except Fault as error:
+                if error.faultCode == 4:  # bad username/pass
+                    yield 'attempted'
+                elif error.faultCode == 12:  # throttled
+                    yield 'throttled'
+
+    print("API rate limiting test:")
+    # the API will throttle after 10 requests, so make 9 requests first, then
+    # rush two calls
+    rusher = UserAPIInvalidAuthTester(9)
+    # preform the first 9 requests so the next request should set a throttling
+    # indicator
+    duration, results = rusher.analyse()
+    # change the number of threads we want to make
+    rusher.thread_count = 2
+    # only one call should not be throttled
+    rusher.analyse()
