@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 from collections import Counter
 from datetime import timedelta
-from threading import Thread, Event, active_count
-from time import time, sleep
+from threading import Thread, Event, Condition
+from time import time
 from xmlrpclib import ServerProxy, Fault
 
 
@@ -13,10 +13,13 @@ class Stampede(object):
     """
     def __init__(self, thread_count):
         self.thread_count = thread_count
+        # this is locked by workers
+        self.ready_progress = Condition()
+        self._total_ready = 0
+        # this triggers the rush
         self.trigger = Event()
         self.return_list = []
         self.threads = []
-        self.ready = []
 
     def _create_threads(self):
         """
@@ -25,9 +28,8 @@ class Stampede(object):
         self._wait_for_threads()
         self.threads = []
         self.return_list = []
-        self.ready = []
         for _ in range(self.thread_count):
-            thread = Thread(target=self.work)
+            thread = Thread(target=self._work)
             thread.start()
             self.threads.append(thread)
 
@@ -54,10 +56,11 @@ class Stampede(object):
         Start up all the worker threads, wait for them to be ready to rush
         and then start the rush event. Returns the duration and results.
         """
+        self.ready_progress.acquire()
         self._create_threads()
-        # TODO: replace with a threading object
-        while len(self.ready) != self.thread_count:
-            sleep(.05)
+        self.ready_progress.wait()
+        self.ready_progress.release()
+
         start = time()
         wait_until = time() + max_time if max_time else None
 
@@ -69,21 +72,33 @@ class Stampede(object):
         duration = end-start
         return duration, results
 
+    def _work(self):
+        """
+        Calls the worker method.
+        """
+        worker = iter(self.work())
+        next(worker)
+        self.ready_progress.acquire()
+        self._total_ready += 1
+        if self._total_ready == self.thread_count:
+            self.ready_progress.notify_all()
+        self.ready_progress.release()
+        # Wait for the trigger to be fired
+        self.trigger.wait()
+        try:
+            result = next(worker)
+        except StopIteration:
+            result = None
+        self.return_list.append(result)
+
     def work(self):
         """
         This should be overridden in a subclass and called as soon as the
         worker thread is ready to begin rushing it's main task.
         """
-        # XXX: maybe yeild, set the ready +1, then resume on the trigger
-        self.ready.append(1)
-        self.trigger.wait()
-
-    def work_return(self, result):
-        """
-        This returns a worker thread result by appending it to the result
-        list - lists are thread safe.
-        """
-        self.return_list.append(result)
+        pass
+        yield
+        yield True
 
     def analyse(self, max_time=0):
         """
@@ -106,18 +121,17 @@ class UserAPIFakeAuthTester(Stampede):
 
     def work(self):
         proxy = ServerProxy(self.uri)
-        super(UserAPIFakeAuthTester, self).work()
+        yield
         try:
             proxy.server.list()
         except Fault as error:
             if error.faultCode == 4:  # bad username/pass
-                return self.work_return('attempted')
+                yield 'attempted'
             elif error.faultCode == 12:  # throttled
-                return self.work_return('throttled')
+                yield 'throttled'
 
 
 if __name__ == '__main__':
     print
     print "API user+password (fake account) authentication test:"
     UserAPIFakeAuthTester(5).analyse()
-
