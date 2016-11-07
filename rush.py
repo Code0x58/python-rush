@@ -2,6 +2,8 @@
 """
 Provide a superclass for rushing a resource.
 """
+from __future__ import absolute_import
+import sys
 from collections import defaultdict
 from datetime import timedelta
 from threading import Thread, Event, Condition
@@ -117,7 +119,8 @@ class Rusher(object):
             result = None
         self.return_list.append(result)
 
-    def work(self):
+    @staticmethod
+    def work():
         """
         Override this method to do work and return a result.
         """
@@ -126,9 +129,9 @@ class Rusher(object):
         # do work work here
         yield "Finished"  # return result of work here
 
-    def analyse(self, max_seconds=None):
+    def analyse(self, max_seconds=None, output=sys.stdout):
         """
-        Perform a rush and print a summary of results.
+        Perform a rush and wite a summary of results to an output.
 
         This requires the results of self.work be hashable.
 
@@ -139,11 +142,11 @@ class Rusher(object):
         counts = defaultdict(int)
         for result in results:
             counts[result] += 1
-        print("{} threads completed in {}, results:".format(
+        output.write("{} threads completed in {}, results:\n".format(
             len(results),
             str(timedelta(seconds=duration)).lstrip('0:'),
         ))
         for result, count in counts.items():
-            print("\t{}: {}".format(result, count))
+            output.write("\t{}: {}\n".format(result, count))
 
         return (duration, results)
