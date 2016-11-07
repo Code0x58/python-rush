@@ -19,7 +19,7 @@ from rush import Rusher
 
 class ApiAuthThrottlingTester(Rusher):
     """
-    Rush the API with invalid credentials authentication attempts.
+    Rush the API with invalid authentication attempts.
     """
     uri = 'https://badname:supersecretpassword@api.memset.com/v1/xmlrpc/'
 
