@@ -1,4 +1,7 @@
-#!/usr/bin/env python
+# -*- encoding: utf-8 -*-
+"""
+Provide a superclass for rushing a resource.
+"""
 from collections import defaultdict
 from datetime import timedelta
 from threading import Thread, Event, Condition
@@ -7,12 +10,14 @@ from time import time
 
 class Rusher(object):
     """
-    This class is intended to create self.thread_count worker threads which
-    will be used to rush a resource. This can be used to test rate limiting.
+    Provide a simple interface for making rushing resource.
+
+    This class creates self.thread_count worker threads which will be used to
+    rush a resource when they are ready.
 
     During Rusher.rush() the workers are created and run until they yield.
-    Once all the workers have yielded they are then run at once so they can
-    rush a resource.
+    Once all the workers have yielded they are then woken up at once so they
+    can rush a resource.
     """
     def __init__(self, thread_count):
         self.thread_count = thread_count
@@ -40,8 +45,7 @@ class Rusher(object):
 
     def _wait_for_threads(self, end_time=None):
         """
-        Wait for all worker threads to finish. Return True if all finished
-        before the specified end time.
+        Wait for all worker threads to finish.
 
         Unfinished threads are not killed.
         """
@@ -49,19 +53,20 @@ class Rusher(object):
             if end_time is not None:
                 max_wait = end_time - time()
                 if max_wait < 0:
-                    return False
+                    return
             else:
                 max_wait = None
             thread.join(max_wait)
-            # this is likely to happen if the timeout happened
+            # this is very likely to happen if the timeout tripped
             if thread.is_alive():
-                return False
-        return True
+                return
+
+        # all workers returned before end_time
+        return
 
     def rush(self, max_seconds=None):
         """
-        Start up all the worker threads, wait for them to be ready to rush
-        and then fire the rush event.
+        Create worker threads and trigger their rush once they are ready.
 
         max_seconds is either None for no limiting, or a float.
 
@@ -89,10 +94,13 @@ class Rusher(object):
 
     def _work(self):
         """
-        Iterates the work generator once for it to prepare itself, then a
-        second time when all the workers are ready to rush.
+        Interface with the orchestration in the rush method, to run the worker.
 
-        Appends the result of the second yield to self.return_list
+        self.work is iterated once so it can preform any needed prepairation,
+        then again when this worker thread is awakened in self.rush() when
+        the final worker notifies it that it has completed.
+
+        The result of the second yield to self.return_list.
         """
         worker = iter(self.work())
         next(worker)
@@ -120,8 +128,9 @@ class Rusher(object):
 
     def analyse(self, max_seconds=None):
         """
-        Perform a rush and print the numer of completed workers, duration,
-        and result counts. This requires results to be hashable.
+        Perform a rush and print a summary of results.
+
+        This requires the results of self.work be hashable.
 
         Returns (duration, results) from the rush method.
         """
@@ -138,37 +147,3 @@ class Rusher(object):
             print("\t{}: {}".format(result, count))
 
         return (duration, results)
-
-
-if __name__ == '__main__':
-    try:
-        from xmlrpclib import ServerProxy, Fault
-    except ImportError:
-        from xmlrpc.client import ServerProxy, Fault
-
-    class UserAPIInvalidAuthTester(Rusher):
-        """
-        Rush the API with invalid authentication attempts.
-        """
-        uri = 'https://badname:supersecretpassword@api.memset.com/v1/xmlrpc/'
-
-        def work(self):
-            proxy = ServerProxy(self.uri)
-            yield
-            try:
-                proxy.server.list()
-            except Fault as error:
-                if error.faultCode == 4:  # bad username/pass
-                    yield 'attempted'
-                elif error.faultCode == 12:  # throttled
-                    yield 'throttled'
-
-    print("API rate limiting test:")
-    # the API will throttle after 10 requests
-    rusher = UserAPIInvalidAuthTester(9)
-    # preform 9 requests so the next request should set a throttling indicator
-    duration, results = rusher.analyse()
-    # change the number of threads we want to make
-    rusher.thread_count = 2
-    # only one call should not be throttled
-    rusher.analyse()
