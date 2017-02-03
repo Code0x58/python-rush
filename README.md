@@ -1,8 +1,8 @@
 # Rush
-This python module is for making spmple tools that rush a resource, such as an
+This python module is for making simple tools that rush a resource, such as an
 API endpoint or web UI. This runs with both Python 2.6+ or 3.0+.
 
-This was origionally created to test the throttling of authentication attempts.
+This was originally created to test the throttling of authentication attempts.
 It is quite basic, but was enough to get good results from a Django based web
 app. I imagine that this is good enough to indicate if rate limiting is
 reasonably implemented on faster systems (more likely to come down to network?).
