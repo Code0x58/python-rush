@@ -73,11 +73,10 @@ class Rusher(object):
 
         Returns (duration, results).
         """
-        self.ready_progress.acquire()
-        self._total_ready = 0
-        self._create_threads()
-        self.ready_progress.wait()
-        self.ready_progress.release()
+        with self.ready_progress:
+            self._total_ready = 0
+            self._create_threads()
+            self.ready_progress.wait()
 
         start = time()
         wait_until = time() + max_seconds if max_seconds else None
@@ -105,11 +104,10 @@ class Rusher(object):
         """
         worker_run = iter(self.worker(index, self.thread_count))
         next(worker_run)
-        self.ready_progress.acquire()
-        self._total_ready += 1
-        if self._total_ready == self.thread_count:
-            self.ready_progress.notify_all()
-        self.ready_progress.release()
+        with self.ready_progress:
+            self._total_ready += 1
+            if self._total_ready == self.thread_count:
+                self.ready_progress.notify_all()
         # Wait for the trigger to be fired
         self.trigger.wait()
         try:
