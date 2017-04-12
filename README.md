@@ -18,6 +18,7 @@ try:
 except ImportError:
     # Python 3
     from xmlrpc.client import ServerProxy, Fault
+
 from rush import Rusher
 
 
@@ -42,11 +43,11 @@ print("API rate limiting test:")
 # the API will throttle after 10 requests, so make 9 requests first, then rush two calls
 rusher = Rusher(api_auth_tester, 9)
 # preform the first 9 requests so the next request should set a throttling indicator
-duration, results = rusher.analyse()
+duration, results = rusher.rush_and_report()
 # change the number of threads we want to make
 rusher.thread_count = 2
 # only one call should not be throttled
-rusher.analyse()
+rusher.rush_and_report()
 ```
 This will produce output like the following:
 ```
