@@ -6,7 +6,7 @@ from __future__ import absolute_import
 import unittest
 from time import sleep
 
-from .rush import Rusher
+from rush import Rusher
 
 
 class TestRusher(unittest.TestCase):
