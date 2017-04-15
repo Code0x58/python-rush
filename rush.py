@@ -3,11 +3,14 @@
 Provide a class for orchestrating the rush of some yielding callable.
 """
 from __future__ import absolute_import
+
 import sys
 from collections import defaultdict
 from datetime import timedelta
-from threading import Thread, Event, Condition
+from threading import Condition, Event, Thread
 from time import time
+
+__all__ = ['Rusher', 'rush', 'rush_and_report']
 
 
 class Rusher(object):
@@ -137,3 +140,19 @@ class Rusher(object):
             output.write("\t{}: {}\n".format(result, count))
 
         return (duration, results)
+
+
+def rush(worker, thread_count=2, max_seconds=None):
+    """
+    Convenience function for Rusher.rush
+    """
+    return (Rusher(worker, thread_count)
+            .rush(max_seconds=max_seconds))
+
+
+def rush_and_report(worker, thread_count=2, max_seconds=None, output=sys.stdout):
+    """
+    Convenience function for Rusher.rush_and_report
+    """
+    return (Rusher(worker, thread_count)
+            .rush_and_report(max_seconds=max_seconds, output=output))
